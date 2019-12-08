@@ -1,0 +1,283 @@
+---
+title: "Lab 2"
+author: "Gunchetan Singh Johal"
+date: "10/16/2019"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(ggplot2)
+library(tidyverse)
+library(lubridate)
+```
+# Introduction
+The purpose of this report is to advise a utility serving parts of the northwestern United States regarding the renewable generation portfolio over different areas in their jurisdication. This preliminary study focuses on providing preliminary insight into the potential of two particular sites: Ashton, Idaho and Deer Lodge, Montana. This preliminary insight will be broadly divided into two parts:
+1. Explore the temporal weather data on these two sites
+2. Assess the potential wind and solar generation at these sites    
+# Dataset
+We have been provided with data hourly weather data at these two sites for the year of 2014 from this repository of weather information: http://www.usbr.gov/pn/agrimet/webaghrread.html, which also contains the descriptions of the variables.
+
+First, we will load the data files
+```{r}
+Ashton <- read.table('Ashton14.txt', header = TRUE)
+Deerlodge <- read.table('Deerlodge14.txt', header = TRUE)
+```
+
+Now that we have loaded the files, let us take a look at the main variables, for which we have data.
+```{r}
+names(Ashton)
+
+names(Deerlodge)
+
+```
+
+So, we see the key information provided in this data are: Date (in mm/dd/yr), Time (in hours for a day), AiR Temperature (in Deg F), Relative Humidity (%), Wind Direction (Degrees Azimuth), Peak Wind Gust (mph), Wind Speed (hourly average in mph) and Solar Radiation (Langleys / hour)  
+We can see from a look on the data that the time interval between datapoints provided to us is 1 hour.
+
+The first bit of data manipulation we will do is to add a column which lists the time as hours starting from 01 Jan 2014 00:00. This will help us plot the data with repsect to time over the full year.
+```{r}
+Ashton$Total_hours<- seq(0, length.out=nrow(Ashton), by=1)
+Deerlodge$Total_hours<- seq(0, length.out=nrow(Deerlodge), by=1)
+```
+
+Now, the second bit of data manipulation that we need to do is to add a column that indicates the month for each of the entries. This will help us gain insight on some monthly patterns
+```{r}
+Ashton$Month <- strftime(as.Date(Ashton$DATE, "%m/%d/%Y"),"%m")
+Deerlodge$Month <- strftime(as.Date(Deerlodge$DATE, "%m/%d/%Y"), "%m")
+```
+Lastly, we will use a moving average method to smooth out the values as we plot them for the whole year. This is because we have been given a time series data, which by its very nature, will have a lot of fluctuations within a day. The fluctuation act as noise when we want to see the pattern of data over an entire year.
+
+# Analysis
+
+Let us first look at the basic weather patterns. We start by looking at distribution of wind speeds and wind directions over a year:
+
+```{r}
+ggplot(Ashton, aes(WS)) + geom_histogram() + ggtitle("Figure 1: Wind Speed over a year in Ashton") + geom_vline(xintercept = 7, color = "red") + labs(x= "Wind Speed", y = "Frequency")
+ggplot(Ashton, aes(WD)) + geom_histogram() + ggtitle("Figure 2: Wind Direction over a year in Ashton") + labs(x= "Wind DIrection", y = "Frequency")
+```
+A key insight from Figure 2 is that the wind seems to blow only in one direction (approx. 60 to 100 Deg - with winds in both directions) for Ashton. ANother insight (from Figure 1) is that the mean wind speed for Ashton is 7 mph, which is just equal to the cut-in speed required for wind turbine to start rotating, while the median speed is 5.7 mph. 
+Similarly, for Deerlodge:
+```{r}
+ggplot(Deerlodge, aes(WS)) + geom_histogram() + ggtitle("Figure 3: Wind Speed in Deerlodge 2014") + geom_vline(xintercept = 7, color = "red") + labs(x= "Wind Speed", y = "Frequency")
+ggplot(Deerlodge, aes(WD)) + geom_histogram() + ggtitle("Figure 4: Wind Direction in Deerlodge 2014") + labs(x= "Wind Direction", y = "Frequency")
+```
+So we can see from Figure 3 that here to we have one dominant wind direction (-30 to 30 degrees with winds in both directions ) for Deerlodge and from Figure 4, we see that it has a mean wind speed of 6.64 mph (which is lower than the cut-in speed required for a wind turbine to start rotation) and median wind speed of 4.8 mph. Both of the median and mean speeds for Deerlodge are lower than Ashton.
+
+Next, we look at Total Solar radiation received per month to get an idea of total Solar potential:
+```{r}
+ggplot(Ashton, aes(Month, SI)) + geom_col() + ggtitle("Figure 5:Total Solar Radiation/mo in Ashton 2014") + labs(x= "Month", y = "Total Solar Radiation")
+ggplot(Deerlodge, aes(Month, SI)) + geom_col() + ggtitle("Figure 6:Total Solar Radiation/mo in Deerlodge 2014") + labs(x= "Month", y = "Total Solar Radiation")
+```
+So, we see a fairly gaussian distribution of total solar radiation received on both sites with the mean falling in July. This is to be expected given that it is the peak summer month. We cannot generate any particular insight from these figures, but they do lead us to closely analyse the variations per day throughout the year for Ashton and Deerlodge. However, there is far too much noise due to the daily fluctuations in recordings. It would be interesting to smooth this down and see the distribution of a particular weather element over the year. So, we manipulate the data to get a moving average over a month.
+```{r}
+window = rep(1/23,23)
+OBM_AVG = stats::filter(Ashton$OBM,
+filter = window,
+method = 'convolution',
+sides = 2,
+circular = FALSE)
+Ashton$OBM_AVG <- OBM_AVG
+
+#for Solar radiation
+SI_AVG = stats::filter(Ashton$SI,
+filter = window,
+method = 'convolution',
+sides = 2,
+circular = FALSE)
+Ashton$SI_AVG <- SI_AVG
+
+#for Wind Speed
+WS_AVG = stats::filter(Ashton$WS,
+filter = window,
+method = 'convolution',
+sides = 2,
+circular = FALSE)
+Ashton$WS_AVG <- WS_AVG
+
+```
+
+The figures 7 to 10 show us a smooth curve of temperature variations, Relative Humidity (%), Wind Speed (hourly average in mph) and Solar Radiation (Langleys / hour) throughout the year for Ashton. However, we can clearly remove wind drection and peak wind gusts from this summary table as it does not make sense to form a summary of directions and wind gusts.
+```{r}
+window = rep(1/(23*30),(23*30))
+OBM_MONTH_AVG = stats::filter(Ashton$OBM,
+filter = window,
+method = 'convolution',
+sides = 2,
+circular = FALSE)
+Ashton$OBM_MONTH_AVG <- OBM_MONTH_AVG
+ggplot(Ashton, aes(Total_hours, OBM_MONTH_AVG)) + geom_point() + ggtitle("Figure 7:Temperatures in Ashton 2014") + labs(x= "Hours", y = "Temperature")
+
+#Relative Humidity
+window = rep(1/(23*30),(23*30))
+TU_MONTH_AVG = stats::filter(Ashton$TU,
+filter = window,
+method = 'convolution',
+sides = 2,
+circular = FALSE)
+Ashton$TU_MONTH_AVG <- TU_MONTH_AVG
+ggplot(Ashton, aes(Total_hours, TU_MONTH_AVG)) + geom_point() + ggtitle("Figure 8:Relative Humidity in Ashton 2014") + labs(x= "Hours", y = "Relative Humidity")
+
+#wind speed
+WS_MONTH_AVG = stats::filter(Ashton$WS,
+filter = window,
+method = 'convolution',
+sides = 2,
+circular = FALSE)
+Ashton$WS_MONTH_AVG <- WS_MONTH_AVG
+ggplot(Ashton, aes(Total_hours, WS_MONTH_AVG)) + geom_point() + ggtitle("Figure 9:Wind Speed in Ashton 2014") + labs(x= "Hours", y = "Wind Speed")
+
+#Solar Irradiance
+SI_MONTH_AVG = stats::filter(Ashton$SI,
+filter = window,
+method = 'convolution',
+sides = 2,
+circular = FALSE)
+Ashton$SI_MONTH_AVG <- SI_MONTH_AVG
+ggplot(Ashton, aes(Total_hours, SI_MONTH_AVG)) + geom_point() + ggtitle("Figure 10:Solar Radiation in Ashton 2014") + labs(x= "Hours", y = "Solar Radiation")
+```
+There are a few key insights that we can gather from these plts. Firstly, Relative humidity and Solar radiation seem to have an inverse relation. The first reason for this can be that in general for Ashton, the winter seasons are humid (cloudy) and bring rainfall, while the summer season remains largely dry with clear skies.
+
+Plotting the same for Deerlodge in Figures 11 to 14:
+```{r}
+window = rep(1/(23*30),(23*30))
+OBM_MONTH_AVG = stats::filter(Deerlodge$OBM,
+filter = window,
+method = 'convolution',
+sides = 2,
+circular = FALSE)
+Deerlodge$OBM_MONTH_AVG <- OBM_MONTH_AVG
+ggplot(Deerlodge, aes(Total_hours, OBM_MONTH_AVG)) + geom_point() + ggtitle("Figure 11:Temperature in Deerlodge 2014") + labs(x= "Hours", y = "Temperature")
+
+#Relative Humidity
+TU_MONTH_AVG = stats::filter(Deerlodge$TU,
+filter = window,
+method = 'convolution',
+sides = 2,
+circular = FALSE)
+Deerlodge$TU_MONTH_AVG <- TU_MONTH_AVG
+ggplot(Deerlodge, aes(Total_hours, TU_MONTH_AVG)) + geom_point() + ggtitle("Figure 12:Relative Humidity in Deerlodge 2014") + labs(x= "Hours", y = "Relative Humidity")
+
+#wind speed
+WS_MONTH_AVG = stats::filter(Deerlodge$WS,
+filter = window,
+method = 'convolution',
+sides = 2,
+circular = FALSE)
+Deerlodge$WS_MONTH_AVG <- WS_MONTH_AVG
+ggplot(Deerlodge, aes(Total_hours, WS_MONTH_AVG)) + geom_point() + ggtitle("Figure 13:Wind Speed in Deerlodge 2014") + labs(x= "Hours", y = "Wind Speed")
+
+#Solar Irradiance
+SI_MONTH_AVG = stats::filter(Deerlodge$SI,
+filter = window,
+method = 'convolution',
+sides = 2,
+circular = FALSE)
+Deerlodge$SI_MONTH_AVG <- SI_MONTH_AVG
+ggplot(Deerlodge, aes(Total_hours, SI_MONTH_AVG)) + geom_point() + ggtitle("Figure 14:Solar Radiation in Deerlodge 2014") + labs(x= "Hours", y = "Solar Radiation")
+```
+
+Another key insight that we gain from these plots is that the average wind speeds in both Ashton and Deerlodge are especially low (less than the cut-in speed of 7 mph) in the second half of the year, between June and October. This could be problematic in setting up a wind turbine farm here.
+
+Now that we have a sense of the overall scale and pattern of the solar and wind at Ashton, we will try to analyse the level of seasonality on both these power sources.
+### Figure 25 - Decomposition of Solar Radiation (additive time series) for Ashton (2014)
+
+```{r}
+Ashton_SIts<-ts(Ashton$SI,frequency = 24*7)
+Ashton_SItscomponents <- decompose(Ashton_SIts, type = 'additive')
+plot(Ashton_SItscomponents)
+```
+
+### Figure 16 - Seasonality of Solar Radiation data (additive time series) for Ashton (2014)
+```{r}
+plot(Ashton_SItscomponents$seasonal[1:(24*7)])
+```
+This plot shows a seasonality to the Solar Radiation, which is expected as the times shown on the plot that have Solar Radiation are day times.
+Using the same plot for Wind speed should give us some interesting insight:
+### Figure 17 - Decomposition of Wind Speed (additive time series) for Ashton (2014)
+```{r}
+Ashton_WSts<-ts(Ashton$WS,frequency = 24*7)
+Ashton_WSts_components <- decompose(Ashton_WSts, type = 'additive')
+plot(Ashton_WSts_components)
+
+```
+### Figure 18 - Seosonality of Wind Speed (additive time series) for Ashton (2014)
+```{r}
+plot(Ashton_WSts_components$seasonal[1:(24*7)])
+```
+
+So, we see some daily cyclical nature to the winds in Ashton.
+Similarly, for Deerlodge:
+### Figure 19 - Decomposition of Solar Radiation (additive time series) for Deerlodge (2014)
+
+```{r}
+Deerlodge_SIts<-ts(Deerlodge$SI,frequency = 24*7)
+Deerlodge_SItscomponents <- decompose(Deerlodge_SIts, type = 'additive')
+plot(Deerlodge_SItscomponents)
+```
+
+### Figure 20 - Seosonaility of Solar Radiation (additive time series) for Deerlodge (2014)
+```{r}
+plot(Deerlodge_SItscomponents$seasonal[1:(24*7)])
+```
+
+### Figure 21 - Decomposition of Wind Speeds (additive time series) for Deerlodge (2014)
+```{r}
+Deerlodge_WSts<-ts(Deerlodge$WS,frequency = 24*7)
+Deerlodge_WSts_components <- decompose(Deerlodge_WSts, type = 'additive')
+plot(Deerlodge_WSts_components)
+```
+
+### Figure 22 - Seosonality of Wind Speeds (additive time series) for Deerlodge (2014)
+```{r}
+plot(Deerlodge_WSts_components$seasonal[1:(24*7)])
+```
+
+So, we see some cyclical pattern to the winds in Deerlodge as well. However, the seasonal component is not as strong as the Solar graph.
+
+Now, in order to analyze whether we can install a wind or solar power generation plant in these areas, we need to see if there is some predictability in the data. That is, can we predict the wind and solar performance of our plant based on past data. This will be checked using the correlation function
+We will now check for correlations for Ashton:
+```{r}
+acf(Ashton$SI,lag.max = (24*7),main="Figure 23: Ashton Solar Radiation Part-Correlation")
+acf(Ashton$WS,lag.max = (24*7),main="Figure 24: Ashton Wind Speed Part-Correlation")
+```
+Checking the same for Deerlodge:
+```{r}
+acf(Deerlodge$SI,lag.max = (24*7),main="Figure 25:Deerlodge Solar Radiation Part-Correlation")
+acf(Deerlodge$WS,lag.max = (24*7),main="Figure 26:Deerlodge Wind Speed Part-Correlation")
+```
+Here, we see that there is very significant correlation between time lagged values. But this correlation needs to be checked using the partial correlation method. Checking for Partial Correlation:
+```{r}
+pacf(Ashton$SI,lag.max = 24*7,main="Figure 27:Solar Radiation Partial AutoCorrelation")
+
+pacf(Ashton$WS,lag.max = 24*7,main="Figure 28:Wind Speed Partial AutoCorrelation")
+
+pacf(Deerlodge$SI,lag.max = 24*7,main="Figure 29:Solar Radiation Partial AutoCorrelation")
+
+pacf(Deerlodge$WS,lag.max = 24*7,main="Figure 30:Wind Speed Partial AutoCorrelation")
+```
+
+So, here we see that the partial correlation for Solar Radiation in Ashton exceeds significance bounds for lag = 20 hours. For wind speed, a lag = 2 & 20 hours, we get a significant correlation between wind speeds.
+Similarly, for Deerlodge, we have a significant partial correlation for Soalr Radiation at lag = 20 hours, while Wind speed has a significant partial correlatin at lag = 2 & 20 hours. However, the correlation value for wind is much lower.
+
+Now that we have analyzed the temporal weather characteristics and the predicatbility of solar as well as wind resources, we will compare how much power can be generated based in both Ashton and Deerlodge based on the data provided.
+Now, we know that Total solar power generated in an area is directly proportional to the amount of radiation received. So, in order to compare the total solar radiation on both sites, we will need to compare the radiation received. We already have a moving average of this data, so Let us overlay this graph for both the sites.
+```{r}
+ggplot(Ashton, aes(Total_hours, SI_MONTH_AVG)) + geom_point() + geom_point(data = Deerlodge, color = "red") + ggtitle("Figure 31:Solar Radiation in Ashton and Deerlodge 2014") + labs(x= "Hours", y = "Solar Radiation")
+```
+As we can see from this comparison, the total solar radiation incident for Ashton (Shown in black) in peak summer months, and the average solar radiation received per hour is higher than that of Deerlodge.
+
+Similarly for Wind power: 
+```{r}
+ggplot(Ashton, aes(Total_hours, WS_MONTH_AVG)) + geom_point() + geom_point(data = Deerlodge, color = "red") + ggtitle("Figure 32:Wind Speed in Ashton and Deerlodge 2014") + labs(x= "Hours", y = "Wind Speed")
+```
+
+As we can see from Figures 31 & 32, the total wind power generated from Ashton (in black) will be higher than in Deerlodge as clearly, the area under the graph for Ashton is higher. Additionally, the wind power generated is proportional to the wind speeds by a power of 3. So, this effect will be further enhanced.
+
+# Conclusion
+So, in conclusion, based on the data provided, Ashton would be a better site for both: solar as well as wind power generation. In fact, as the wind speeds are higher (greater than 7 mph) for the winter seasons and the solar radiation is high during the summers, a combination of these two sources for Ashton would be the best investment for power generation between the two sites.
+
+
+
